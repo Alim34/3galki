@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Три галочки</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+<header class="topbar">
+    <span class="topbar-title">Три галочки</span>
+    <div class="topbar-actions">
+      <button type="button" id="theme-btn" class="settings-btn" aria-label="Переключить тему">☾</button>
+      <button type="button" id="settings-btn" class="settings-btn" aria-label="Настройки">⚙</button>
+    </div>
+  </header>
+
+  <section id="settings-panel" class="card settings-panel is-hidden">
+    <p class="section-label">Напоминание</p>
+    <div class="reminder-row">
+      <label class="switch">
+        <input type="checkbox" id="reminder-toggle">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+      </label>
+      <span class="reminder-text">Каждый вечер в</span>
+      <input type="time" id="reminder-time" class="time-input" value="21:00">
+    </div>
+    <p id="reminder-note" class="reminder-note"></p>
+
+    <div class="settings-divider"></div>
+
+    <p class="section-label">Твои три галочки</p>
+    <div class="habits-editor" id="habits-editor"></div>
+    <div class="habits-editor-actions">
+      <button type="button" id="habits-save" class="mini-btn mini-btn--primary">Сохранить</button>
+      <button type="button" id="habits-reset" class="mini-btn">Вернуть стандартные</button>
+    </div>
+    <p id="habits-editor-note" class="reminder-note"></p>
+  </section>
+
+  <!-- ===== ВКЛАДКА: СЕГОДНЯ ===== -->
+  <main id="view-today" class="view is-active">
+
+    <section class="date-card">
+      <p class="eyebrow">Сегодня</p>
+      <h1 id="today-date" class="date-heading"></h1>
+    </section>
+
+    <section class="card">
+      <p class="section-label">Как прошёл день?</p>
+      <div class="mood-row" id="mood-row">
+        <button type="button" class="mood-btn" data-mood="red">
+          <span class="mood-dot mood-dot--red"></span>
+          <span class="mood-label">Плохой</span>
+        </button>
+        <button type="button" class="mood-btn" data-mood="yellow">
+          <span class="mood-dot mood-dot--yellow"></span>
+          <span class="mood-label">Обычный</span>
+        </button>
+        <button type="button" class="mood-btn" data-mood="green">
+          <span class="mood-dot mood-dot--green"></span>
+          <span class="mood-label">Хороший</span>
+        </button>
+      </div>
+      <p id="bad-day-tip" class="bad-day-tip is-hidden">
+        Плохой день — это не провал. Минимальная версия на сегодня:
+        <strong>50 слов · 10 приседаний · 1 страница.</strong>
+        15 минут — и день спасён.
+      </p>
+    </section>
+
+    <section class="card">
+      <p class="section-label">Три привычки</p>
+      <div class="habits-list" id="habits-list"></div>
+    </section>
+
+    <button type="button" id="finish-day-btn" class="finish-btn">День завершён</button>
+    <p id="streak-note" class="streak-note"></p>
+
+  </main>
+
+  <!-- ===== ВКЛАДКА: СТАТИСТИКА ===== -->
+  <main id="view-stats" class="view">
+
+    <section class="month-nav">
+      <button type="button" id="prev-month" class="nav-arrow" aria-label="Предыдущий месяц">‹</button>
+      <h2 id="month-title" class="month-title"></h2>
+      <button type="button" id="next-month" class="nav-arrow" aria-label="Следующий месяц">›</button>
+    </section>
+
+    <section class="card" id="stats-card">
+      <div class="stats-grid" id="stats-grid"></div>
+    </section>
+
+    <section class="card">
+      <div class="weekday-row" id="weekday-row"></div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+      <p id="day-detail" class="day-detail is-hidden"></p>
+    </section>
+
+    <button type="button" id="summary-btn" class="summary-btn">Итоги месяца</button>
+    <section id="summary-card" class="card summary-card is-hidden"></section>
+
+  </main>
+
+  <!-- ===== ВКЛАДКА: ЧТО ЭТО? ===== -->
+  <main id="view-about" class="view">
+
+    <section class="date-card">
+      <p class="eyebrow">О приложении</p>
+      <h1 class="date-heading">Что такое Три&nbsp;галочки?</h1>
+    </section>
+
+    <section class="card">
+      <p class="about-lead">Маленький трекер для обычной жизни.</p>
+      <p class="about-text">
+        Три галочки не пытается превратить тебя в идеальную машину
+        продуктивности. Каждый день здесь всего три маленьких дела:
+        ✍️ писать, 🏋️ двигаться и 📖 развиваться.
+      </p>
+    </section>
+
+    <section class="card">
+      <p class="section-label">Как это работает</p>
+      <div class="about-item">
+        <span class="about-dot about-dot--green"></span>
+        <div>
+          <p class="about-item-title">Хороший день</p>
+          <p class="about-item-text">Все три дела выполнены. 3 из 3. Отличный результат.</p>
+        </div>
+      </div>
+      <div class="about-item">
+        <span class="about-dot about-dot--yellow"></span>
+        <div>
+          <p class="about-item-title">Нормальный день</p>
+          <p class="about-item-text">Получилось сделать одно или два дела. Это тоже движение вперёд.</p>
+        </div>
+      </div>
+      <div class="about-item">
+        <span class="about-dot about-dot--red"></span>
+        <div>
+          <p class="about-item-title">Плохой день</p>
+          <p class="about-item-text">Не получилось сделать ничего. Такое случается. Один плохой день ничего не решает.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <p class="section-label">Самое главное</p>
+      <p class="about-text">
+        Смысл не в идеальной серии, а в том, чтобы возвращаться.
+        Отмечай день за 20 секунд, смотри статистику за месяц —
+        и просто продолжай. Все данные хранятся только на твоём устройстве.
+      </p>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <button type="button" class="tab-btn is-active" data-tab="today">
+      <span class="tab-icon">✓</span>
+      <span>Сегодня</span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="stats">
+      <span class="tab-icon">▦</span>
+      <span>Статистика</span>
+    </button>
+    <button type="button" class="tab-btn" data-tab="about">
+      <span class="tab-icon">i</span>
+      <span>Что это?</span>
+    </button>
+  </nav>
+
+</div>
+
+<!-- ===== ОНБОРДИНГ (первый запуск) ===== -->
+<div id="onboard" class="onboard is-hidden">
+  <div class="onboard-card">
+
+    <div class="onboard-dots">
+      <span class="onboard-dot is-active"></span>
+      <span class="onboard-dot"></span>
+      <span class="onboard-dot"></span>
+    </div>
+
+    <section class="onboard-step is-active" data-step="1">
+      <p class="onboard-eyebrow">Три галочки</p>
+      <h2 class="onboard-title">Три дела в день.<br>Не больше.</h2>
+      <p class="onboard-text">
+        Каждый вечер отмечаешь, что получилось. Двадцать секунд, без планов
+        и списков задач. Смысл не в идеальной серии, а в том, чтобы возвращаться.
+      </p>
+      <div class="onboard-actions">
+        <button type="button" class="finish-btn" data-onboard-go="2">Дальше</button>
+        <button type="button" id="onboard-skip" class="text-btn">Пропустить</button>
+      </div>
+    </section>
+
+    <section class="onboard-step" data-step="2">
+      <h2 class="onboard-title">Выбери свою тройку</h2>
+      <p class="onboard-text">Готовый набор можно поменять в настройках в любой момент.</p>
+      <div class="onboard-presets" id="onboard-presets"></div>
+      <div class="onboard-actions">
+        <button type="button" class="finish-btn" data-onboard-go="3">Дальше</button>
+        <button type="button" class="text-btn" data-onboard-go="1">Назад</button>
+      </div>
+    </section>
+
+    <section class="onboard-step" data-step="3">
+      <h2 class="onboard-title">Твои три галочки</h2>
+      <div class="onboard-chosen" id="onboard-chosen"></div>
+      <label class="onboard-reminder">
+        <span class="switch">
+          <input type="checkbox" id="onboard-reminder" checked>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </span>
+        <span class="reminder-text">Напоминать каждый вечер в 21:00</span>
+      </label>
+      <div class="onboard-actions">
+        <button type="button" id="onboard-finish" class="finish-btn">Начать</button>
+        <button type="button" class="text-btn" data-onboard-go="2">Назад</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

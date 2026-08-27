@@ -1139,12 +1139,15 @@
   }
 
   function applyTheme(theme) {
+    var meta = document.querySelector('meta[name="theme-color"]');
     if (theme === 'light') {
       document.documentElement.setAttribute('data-theme', 'light');
       themeBtn.textContent = '☀';
+      if (meta) meta.setAttribute('content', '#d9d2f2');
     } else {
       document.documentElement.removeAttribute('data-theme');
       themeBtn.textContent = '☾';
+      if (meta) meta.setAttribute('content', '#030305');
     }
   }
 

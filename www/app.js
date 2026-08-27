@@ -297,6 +297,140 @@
     renderToday();
   });
 
+  // ================== ПРАЗДНИК (конфетти + аффирмации) ==================
+  var fxLayer = document.createElement('div');
+  fxLayer.className = 'fx-layer';
+  document.body.appendChild(fxLayer);
+
+  var FX_COLORS = ['#a78bfa', '#8b5cf6', '#62d9a2', '#f0c05a', '#f2705d', '#7dd3fc'];
+  var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var lastBurstAt = 0;
+
+  // Небольшой залп частиц из точки (x, y в px от окна).
+  function burstAt(x, y, count, spread) {
+    if (reducedMotion) return;
+    for (var i = 0; i < count; i++) {
+      var p = document.createElement('span');
+      p.className = 'fx-particle';
+      var angle = Math.random() * Math.PI * 2;
+      var dist = (0.35 + Math.random() * 0.65) * spread;
+      var dx = Math.cos(angle) * dist;
+      var dy = Math.sin(angle) * dist - spread * 0.35; // чуть вверх
+      var size = 5 + Math.random() * 5;
+      p.style.left = x + 'px';
+      p.style.top = y + 'px';
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.background = FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)];
+      if (Math.random() < 0.4) p.style.borderRadius = '50%';
+      p.style.setProperty('--fx-dx', dx + 'px');
+      p.style.setProperty('--fx-dy', dy + 'px');
+      p.style.setProperty('--fx-rot', (Math.random() * 540 - 270) + 'deg');
+      p.style.animationDuration = (0.7 + Math.random() * 0.5) + 's';
+      fxLayer.appendChild(p);
+    }
+    lastBurstAt = Date.now();
+    // чистим слой, когда частицы отжили
+    window.setTimeout(function () {
+      if (Date.now() - lastBurstAt >= 1400) fxLayer.innerHTML = '';
+    }, 1500);
+  }
+
+  function centerOf(el) {
+    var r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  // Залп на галочку: чем больше отмечено, тем щедрее.
+  function celebrateHabit(row, checkedCount) {
+    var c = centerOf(row.querySelector('.habit-check') || row);
+    var counts = [10, 18, 30];
+    var spreads = [70, 100, 140];
+    var idx = Math.min(checkedCount, 3) - 1;
+    burstAt(c.x, c.y, counts[idx], spreads[idx]);
+  }
+
+  // Фейерверк на завершение дня: серия залпов по экрану.
+  function celebrateFinish() {
+    if (reducedMotion) return;
+    var w = window.innerWidth, h = window.innerHeight;
+    burstAt(w * 0.5, h * 0.35, 34, 160);
+    window.setTimeout(function () { burstAt(w * 0.25, h * 0.5, 22, 120); }, 180);
+    window.setTimeout(function () { burstAt(w * 0.75, h * 0.45, 22, 120); }, 320);
+    window.setTimeout(function () { burstAt(w * 0.5, h * 0.6, 26, 140); }, 500);
+  }
+
+  // ---------- Аффирмации ----------
+  // Тон — как в разделе «Что это?»: спокойно, без сюсюканья, про возвращение.
+  var PHRASES = {
+    habit1: [
+      'Начало положено.',
+      'Первая есть. Уже не ноль.',
+      'Маленький шаг — тоже шаг.',
+      'Лёд тронулся.'
+    ],
+    habit2: [
+      'Две из трёх. Хороший темп.',
+      'Ещё одна — и день собран.',
+      'Осталась последняя.',
+      'Почти всё.'
+    ],
+    habit3: [
+      'Все три. Сегодня — полный день.',
+      '3 из 3. Красиво.',
+      'Полный комплект. Так и живём.',
+      'Вся тройка на месте.'
+    ],
+    finishGood: [
+      'Отличный день. Завтра просто продолжай.',
+      'Такие дни складываются в месяцы.',
+      'Хороший день записан. Он теперь никуда не денется.'
+    ],
+    finishOk: [
+      'Обычный день — это тоже день. Засчитано.',
+      'Не каждый день праздник, и это нормально.',
+      'День закрыт. Идём дальше.'
+    ],
+    finishBad: [
+      'Сегодня не очень — но завтра будет лучше. Главное не останавливаться.',
+      'Плохой день записан честно. Это уже смелость.',
+      'Один такой день ничего не решает. Решает то, что ты вернулся.'
+    ],
+    finishEmpty: [
+      'День закрыт. Даже пустой день, отмеченный честно, лучше забытого.',
+      'Записал — значит не бросил.'
+    ],
+    streak: [
+      'Один раз пропустить можно. Два — уже привычка наоборот.',
+      'Серия растёт. Береги её, но не бойся за неё.'
+    ]
+  };
+
+  function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+
+  // Тост — маленькое оконце с фразой внизу экрана.
+  var toastEl = document.createElement('div');
+  toastEl.className = 'toast';
+  document.body.appendChild(toastEl);
+  var toastTimer = null;
+
+  function showToast(text, long) {
+    toastEl.textContent = text;
+    toastEl.classList.add('is-shown');
+    if (toastTimer) window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () {
+      toastEl.classList.remove('is-shown');
+    }, long ? 3600 : 2200);
+  }
+
+  function affirmationForFinish(entry) {
+    var n = doneCount(entry);
+    if (entry.mood === 'red') return pick(PHRASES.finishBad);
+    if (n === 0 && !entry.mood) return pick(PHRASES.finishEmpty);
+    if (entry.mood === 'green' || n === habitsConfig.length) return pick(PHRASES.finishGood);
+    return pick(PHRASES.finishOk);
+  }
+
   habitsList.addEventListener('click', function (e) {
     var row = e.target.closest('.habit-row');
     if (!row) return;
@@ -305,6 +439,15 @@
     entry.habits[key] = !entry.habits[key];
     setEntry(todayKey, entry);
     renderToday();
+
+    // празднуем только постановку галочки, не снятие
+    if (entry.habits[key]) {
+      var n = doneCount(entry);
+      celebrateHabit(row, n);
+      if (n === 1) showToast(pick(PHRASES.habit1));
+      else if (n === 2) showToast(pick(PHRASES.habit2));
+      else if (n >= habitsConfig.length) showToast(pick(PHRASES.habit3));
+    }
   });
 
   finishBtn.addEventListener('click', function () {
@@ -313,6 +456,18 @@
     setEntry(todayKey, entry);
     renderToday();
     if (isCurrentMonthViewed()) renderStats();
+
+    // празднуем только завершение, не отмену
+    if (entry.completed) {
+      celebrateFinish();
+      var streak = computeCurrentStreak();
+      // каждые 7 дней серии — отдельная фраза о серии
+      if (streak > 1 && streak % 7 === 0) {
+        showToast('Серия: ' + streak + ' ' + dayWord(streak) + '. ' + pick(PHRASES.streak), true);
+      } else {
+        showToast(affirmationForFinish(entry), true);
+      }
+    }
   });
 
   // ================== СЕРИЯ (STREAK) ==================
@@ -836,26 +991,139 @@
     return active ? active.dataset.tab : 'today';
   }
 
-  // Свайп между вкладками
-  var touchStartX = 0, touchStartY = 0, touchTracking = false;
+  // ================== СВАЙП СО СДВИГОМ ==================
+  // Экран следует за пальцем; при отпускании либо доезжает до соседней
+  // вкладки, либо возвращается на место. На краях — «резинка».
+  var appEl = document.querySelector('.app');
+  var swipe = {
+    tracking: false,  // палец на экране, ждём определения жеста
+    dragging: false,  // жест распознан как горизонтальный, двигаем экраны
+    startX: 0, startY: 0, startT: 0,
+    dx: 0, width: 1,
+    fromEl: null, toEl: null, toName: null, dir: 0
+  };
+
+  function beginDrag() {
+    var name = currentTab();
+    swipe.fromEl = views[name];
+    swipe.width = swipe.fromEl.offsetWidth || window.innerWidth;
+    swipe.dragging = true;
+    swipe.fromEl.classList.add('view-dragging');
+  }
+
+  function attachNeighbor(dir) {
+    // dir: 1 = свайп влево (следующая вкладка), -1 = вправо (предыдущая)
+    detachNeighbor();
+    var i = TAB_ORDER.indexOf(currentTab());
+    var next = i + dir;
+    if (next < 0 || next >= TAB_ORDER.length) { swipe.toEl = null; swipe.toName = null; return; }
+    swipe.toName = TAB_ORDER[next];
+    swipe.toEl = views[swipe.toName];
+    if (swipe.toName === 'stats') renderStats();
+    swipe.toEl.classList.add('view-peek', 'view-dragging');
+    swipe.toEl.style.top = swipe.fromEl.offsetTop + 'px';
+    swipe.dir = dir;
+  }
+
+  function detachNeighbor() {
+    if (!swipe.toEl) return;
+    swipe.toEl.classList.remove('view-peek', 'view-dragging', 'view-anim');
+    swipe.toEl.style.top = '';
+    swipe.toEl.style.transform = '';
+    swipe.toEl = null;
+    swipe.toName = null;
+  }
+
+  function setDragPosition(dx) {
+    var dir = dx < 0 ? 1 : -1;
+    if (dir !== swipe.dir || !swipe.toEl) attachNeighbor(dir);
+    if (!swipe.toEl) dx = dx * 0.3; // край списка — сопротивление
+    swipe.fromEl.style.transform = 'translateX(' + dx + 'px)';
+    if (swipe.toEl) {
+      swipe.toEl.style.transform = 'translateX(' + (dx + swipe.dir * swipe.width) + 'px)';
+    }
+  }
+
+  function endDrag(commit) {
+    var fromEl = swipe.fromEl, toEl = swipe.toEl, toName = swipe.toName;
+    var width = swipe.width, dir = swipe.dir;
+    swipe.dragging = false;
+    swipe.fromEl = null;
+
+    if (commit && toEl) {
+      fromEl.classList.add('view-anim');
+      toEl.classList.add('view-anim');
+      fromEl.style.transform = 'translateX(' + (-dir * width) + 'px)';
+      toEl.style.transform = 'translateX(0)';
+      window.setTimeout(function () {
+        fromEl.classList.remove('view-dragging', 'view-anim');
+        fromEl.style.transform = '';
+        toEl.classList.remove('view-peek', 'view-dragging', 'view-anim');
+        toEl.style.top = '';
+        toEl.style.transform = '';
+        swipe.toEl = null; swipe.toName = null; swipe.dir = 0;
+        activateTab(toName, true);
+      }, 260);
+    } else {
+      // откат на место
+      fromEl.classList.add('view-anim');
+      fromEl.style.transform = 'translateX(0)';
+      if (toEl) {
+        toEl.classList.add('view-anim');
+        toEl.style.transform = 'translateX(' + (dir * width) + 'px)';
+      }
+      window.setTimeout(function () {
+        fromEl.classList.remove('view-dragging', 'view-anim');
+        fromEl.style.transform = '';
+        detachNeighbor();
+        swipe.dir = 0;
+      }, 260);
+    }
+  }
 
   document.addEventListener('touchstart', function (e) {
-    if (e.touches.length !== 1 || !onboard.classList.contains('is-hidden')) { touchTracking = false; return; }
-    touchTracking = true;
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
+    if (e.touches.length !== 1 || swipe.dragging) { swipe.tracking = false; return; }
+    if (!onboard.classList.contains('is-hidden')) { swipe.tracking = false; return; }
+    if (e.target.closest('.tabbar, .switch, input, .settings-panel')) { swipe.tracking = false; return; }
+    swipe.tracking = true;
+    swipe.startX = e.touches[0].clientX;
+    swipe.startY = e.touches[0].clientY;
+    swipe.startT = Date.now();
+    swipe.dx = 0;
   }, { passive: true });
 
-  document.addEventListener('touchend', function (e) {
-    if (!touchTracking) return;
-    touchTracking = false;
-    var dx = e.changedTouches[0].clientX - touchStartX;
-    var dy = e.changedTouches[0].clientY - touchStartY;
-    if (Math.abs(dx) < 60 || Math.abs(dy) > 50) return;
-    var i = TAB_ORDER.indexOf(currentTab());
-    var next = dx < 0 ? i + 1 : i - 1;
-    if (next < 0 || next >= TAB_ORDER.length) return;
-    activateTab(TAB_ORDER[next]);
+  document.addEventListener('touchmove', function (e) {
+    if (!swipe.tracking) return;
+    var dx = e.touches[0].clientX - swipe.startX;
+    var dy = e.touches[0].clientY - swipe.startY;
+
+    if (!swipe.dragging) {
+      // решаем, что это: горизонтальный сдвиг или вертикальный скролл
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { swipe.tracking = false; return; }
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) beginDrag();
+      else return;
+    }
+
+    swipe.dx = dx;
+    setDragPosition(dx);
+  }, { passive: true });
+
+  document.addEventListener('touchend', function () {
+    if (!swipe.tracking) return;
+    swipe.tracking = false;
+    if (!swipe.dragging) return;
+
+    var elapsed = Date.now() - swipe.startT;
+    var velocity = Math.abs(swipe.dx) / Math.max(elapsed, 1); // px/ms
+    var farEnough = Math.abs(swipe.dx) > swipe.width * 0.28;
+    var fastEnough = velocity > 0.45 && Math.abs(swipe.dx) > 40;
+
+    endDrag((farEnough || fastEnough) && !!swipe.toEl);
+  }, { passive: true });
+
+  document.addEventListener('touchcancel', function () {
+    swipe.tracking = false;
+    if (swipe.dragging) endDrag(false);
   }, { passive: true });
 
   // ================== ТЕМА ==================

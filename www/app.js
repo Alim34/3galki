@@ -975,11 +975,48 @@
     about: document.getElementById('view-about')
   };
 
-  function activateTab(name) {
+  var scrollPositions = {
+    today: 0,
+    stats: 0,
+    about: 0
+  };
+
+  function activateTab(name, fromSwipe) {
     if (!views[name]) return;
-    tabBtns.forEach(function (b) { b.classList.toggle('is-active', b.dataset.tab === name); });
-    Object.keys(views).forEach(function (k) { views[k].classList.toggle('is-active', k === name); });
+
+    var previous = currentTab();
+    if (previous !== name && views[previous]) {
+      scrollPositions[previous] = window.scrollY || window.pageYOffset || 0;
+    }
+
+    tabBtns.forEach(function (b) {
+      b.classList.toggle('is-active', b.dataset.tab === name);
+    });
+
+    if (fromSwipe) {
+      // Новый экран уже виден как .view-peek. Сначала делаем его активным,
+      // и только после этого убираем старый экран из потока.
+      views[name].classList.add('is-active', 'view-no-anim');
+      Object.keys(views).forEach(function (k) {
+        if (k !== name) views[k].classList.remove('is-active');
+      });
+    } else {
+      Object.keys(views).forEach(function (k) {
+        views[k].classList.toggle('is-active', k === name);
+      });
+    }
+
     if (name === 'stats') renderStats();
+
+    var savedScroll = scrollPositions[name] || 0;
+    window.requestAnimationFrame(function () {
+      window.scrollTo(0, savedScroll);
+      if (fromSwipe) {
+        window.requestAnimationFrame(function () {
+          views[name].classList.remove('view-no-anim');
+        });
+      }
+    });
   }
 
   tabBtns.forEach(function (btn) {
@@ -996,11 +1033,13 @@
   // вкладки, либо возвращается на место. На краях — «резинка».
   var appEl = document.querySelector('.app');
   var swipe = {
-    tracking: false,  // палец на экране, ждём определения жеста
-    dragging: false,  // жест распознан как горизонтальный, двигаем экраны
+    tracking: false,
+    dragging: false,
     startX: 0, startY: 0, startT: 0,
     dx: 0, width: 1,
-    fromEl: null, toEl: null, toName: null, dir: 0
+    fromEl: null, toEl: null, toName: null, dir: 0,
+    finishTimer: null,
+    finished: false
   };
 
   function beginDrag() {
@@ -1008,20 +1047,33 @@
     swipe.fromEl = views[name];
     swipe.width = swipe.fromEl.offsetWidth || window.innerWidth;
     swipe.dragging = true;
+    swipe.finished = false;
+    appEl.classList.add('is-swiping');
     swipe.fromEl.classList.add('view-dragging');
   }
 
   function attachNeighbor(dir) {
-    // dir: 1 = свайп влево (следующая вкладка), -1 = вправо (предыдущая)
     detachNeighbor();
+
     var i = TAB_ORDER.indexOf(currentTab());
     var next = i + dir;
-    if (next < 0 || next >= TAB_ORDER.length) { swipe.toEl = null; swipe.toName = null; return; }
+
+    if (next < 0 || next >= TAB_ORDER.length) {
+      swipe.toEl = null;
+      swipe.toName = null;
+      return;
+    }
+
     swipe.toName = TAB_ORDER[next];
     swipe.toEl = views[swipe.toName];
+
     if (swipe.toName === 'stats') renderStats();
+
+    // Сосед сразу становится реальным видимым слоем, пока текущий ещё
+    // остаётся на месте. Поэтому между экранами нет пустого кадра.
     swipe.toEl.classList.add('view-peek', 'view-dragging');
     swipe.toEl.style.top = swipe.fromEl.offsetTop + 'px';
+    swipe.toEl.style.transform = 'translateX(' + (dir * swipe.width) + 'px)';
     swipe.dir = dir;
   }
 
@@ -1036,55 +1088,143 @@
 
   function setDragPosition(dx) {
     var dir = dx < 0 ? 1 : -1;
-    if (dir !== swipe.dir || !swipe.toEl) attachNeighbor(dir);
-    if (!swipe.toEl) dx = dx * 0.3; // край списка — сопротивление
-    swipe.fromEl.style.transform = 'translateX(' + dx + 'px)';
+
+    if (dir !== swipe.dir || !swipe.toEl) {
+      attachNeighbor(dir);
+    }
+
+    if (!swipe.toEl) {
+      dx = dx * 0.3;
+    }
+
+    swipe.fromEl.style.transform = 'translate3d(' + dx + 'px, 0, 0)';
+
     if (swipe.toEl) {
-      swipe.toEl.style.transform = 'translateX(' + (dx + swipe.dir * swipe.width) + 'px)';
+      swipe.toEl.style.transform =
+        'translate3d(' + (dx + swipe.dir * swipe.width) + 'px, 0, 0)';
     }
   }
 
+  function clearFinishTimer() {
+    if (swipe.finishTimer) {
+      window.clearTimeout(swipe.finishTimer);
+      swipe.finishTimer = null;
+    }
+  }
+
+  function finishCommit(fromEl, toEl, toName) {
+    if (swipe.finished) return;
+    swipe.finished = true;
+    clearFinishTimer();
+
+    // Сначала новый экран становится активным, пока старый ещё существует.
+    activateTab(toName, true);
+
+    fromEl.classList.remove('view-dragging', 'view-anim');
+    fromEl.style.transform = '';
+
+    toEl.classList.remove('view-peek', 'view-dragging', 'view-anim');
+    toEl.style.top = '';
+    toEl.style.transform = '';
+
+    swipe.toEl = null;
+    swipe.toName = null;
+    swipe.dir = 0;
+    appEl.classList.remove('is-swiping');
+  }
+
+  function finishRollback(fromEl, toEl) {
+    if (swipe.finished) return;
+    swipe.finished = true;
+    clearFinishTimer();
+
+    fromEl.classList.remove('view-dragging', 'view-anim');
+    fromEl.style.transform = '';
+
+    if (toEl) {
+      toEl.classList.remove('view-peek', 'view-dragging', 'view-anim');
+      toEl.style.top = '';
+      toEl.style.transform = '';
+    }
+
+    swipe.toEl = null;
+    swipe.toName = null;
+    swipe.dir = 0;
+    appEl.classList.remove('is-swiping');
+  }
+
   function endDrag(commit) {
-    var fromEl = swipe.fromEl, toEl = swipe.toEl, toName = swipe.toName;
-    var width = swipe.width, dir = swipe.dir;
+    var fromEl = swipe.fromEl;
+    var toEl = swipe.toEl;
+    var toName = swipe.toName;
+    var width = swipe.width;
+    var dir = swipe.dir;
+
     swipe.dragging = false;
     swipe.fromEl = null;
+    swipe.finished = false;
+    clearFinishTimer();
+
+    if (!fromEl) return;
 
     if (commit && toEl) {
       fromEl.classList.add('view-anim');
       toEl.classList.add('view-anim');
-      fromEl.style.transform = 'translateX(' + (-dir * width) + 'px)';
-      toEl.style.transform = 'translateX(0)';
-      window.setTimeout(function () {
-        fromEl.classList.remove('view-dragging', 'view-anim');
-        fromEl.style.transform = '';
-        toEl.classList.remove('view-peek', 'view-dragging', 'view-anim');
-        toEl.style.top = '';
-        toEl.style.transform = '';
-        swipe.toEl = null; swipe.toName = null; swipe.dir = 0;
-        activateTab(toName, true);
-      }, 260);
+
+      fromEl.style.transform = 'translate3d(' + (-dir * width) + 'px, 0, 0)';
+      toEl.style.transform = 'translate3d(0, 0, 0)';
+
+      var onCommitEnd = function (e) {
+        if (e && e.propertyName !== 'transform') return;
+        fromEl.removeEventListener('transitionend', onCommitEnd);
+        finishCommit(fromEl, toEl, toName);
+      };
+
+      fromEl.addEventListener('transitionend', onCommitEnd);
+      swipe.finishTimer = window.setTimeout(function () {
+        fromEl.removeEventListener('transitionend', onCommitEnd);
+        finishCommit(fromEl, toEl, toName);
+      }, 420);
     } else {
-      // откат на место
+      // Откат.
       fromEl.classList.add('view-anim');
-      fromEl.style.transform = 'translateX(0)';
+      fromEl.style.transform = 'translate3d(0, 0, 0)';
+
       if (toEl) {
         toEl.classList.add('view-anim');
-        toEl.style.transform = 'translateX(' + (dir * width) + 'px)';
+        toEl.style.transform = 'translate3d(' + (dir * width) + 'px, 0, 0)';
       }
-      window.setTimeout(function () {
-        fromEl.classList.remove('view-dragging', 'view-anim');
-        fromEl.style.transform = '';
-        detachNeighbor();
-        swipe.dir = 0;
-      }, 260);
+
+      var onRollbackEnd = function (e) {
+        if (e && e.propertyName !== 'transform') return;
+        fromEl.removeEventListener('transitionend', onRollbackEnd);
+        finishRollback(fromEl, toEl);
+      };
+
+      fromEl.addEventListener('transitionend', onRollbackEnd);
+      swipe.finishTimer = window.setTimeout(function () {
+        fromEl.removeEventListener('transitionend', onRollbackEnd);
+        finishRollback(fromEl, toEl);
+      }, 420);
     }
   }
 
   document.addEventListener('touchstart', function (e) {
-    if (e.touches.length !== 1 || swipe.dragging) { swipe.tracking = false; return; }
-    if (!onboard.classList.contains('is-hidden')) { swipe.tracking = false; return; }
-    if (e.target.closest('.tabbar, .switch, input, .settings-panel')) { swipe.tracking = false; return; }
+    if (e.touches.length !== 1 || swipe.dragging) {
+      swipe.tracking = false;
+      return;
+    }
+
+    if (!onboard.classList.contains('is-hidden')) {
+      swipe.tracking = false;
+      return;
+    }
+
+    if (e.target.closest('.tabbar, .switch, input, .settings-panel')) {
+      swipe.tracking = false;
+      return;
+    }
+
     swipe.tracking = true;
     swipe.startX = e.touches[0].clientX;
     swipe.startY = e.touches[0].clientY;
@@ -1094,14 +1234,22 @@
 
   document.addEventListener('touchmove', function (e) {
     if (!swipe.tracking) return;
+
     var dx = e.touches[0].clientX - swipe.startX;
     var dy = e.touches[0].clientY - swipe.startY;
 
     if (!swipe.dragging) {
-      // решаем, что это: горизонтальный сдвиг или вертикальный скролл
-      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { swipe.tracking = false; return; }
-      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) beginDrag();
-      else return;
+      // Решаем, что это: горизонтальный сдвиг или вертикальный скролл.
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
+        swipe.tracking = false;
+        return;
+      }
+
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
+        beginDrag();
+      } else {
+        return;
+      }
     }
 
     swipe.dx = dx;
@@ -1111,10 +1259,11 @@
   document.addEventListener('touchend', function () {
     if (!swipe.tracking) return;
     swipe.tracking = false;
+
     if (!swipe.dragging) return;
 
     var elapsed = Date.now() - swipe.startT;
-    var velocity = Math.abs(swipe.dx) / Math.max(elapsed, 1); // px/ms
+    var velocity = Math.abs(swipe.dx) / Math.max(elapsed, 1);
     var farEnough = Math.abs(swipe.dx) > swipe.width * 0.28;
     var fastEnough = velocity > 0.45 && Math.abs(swipe.dx) > 40;
 

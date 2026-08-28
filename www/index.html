@@ -3,15 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#030305" id="theme-meta">
 <title>Три галочки</title>
-<meta name="theme-color" content="#030305">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<!-- Фоновый слой свечения. Вынесен отдельно чтобы не ломать
+     compositing при transform на вкладках (background-attachment:fixed
+     вызывало мерцание в Android WebView). -->
 <div class="bg-glow" aria-hidden="true"></div>
+
 <div class="app">
 
-<header class="topbar">
+  <header class="topbar">
     <span class="topbar-title">Три галочки</span>
     <div class="topbar-actions">
       <button type="button" id="theme-btn" class="settings-btn" aria-label="Переключить тему">☾</button>
@@ -78,8 +83,15 @@
       <div class="habits-list" id="habits-list"></div>
     </section>
 
+    <section class="card">
+      <p class="section-label">Заметка к дню <span class="note-optional">(необязательно)</span></p>
+      <textarea id="day-note" class="day-note-input" rows="2"
+        placeholder="Одна строка, если хочешь…" maxlength="200"></textarea>
+      <p class="note-counter"><span id="note-chars">0</span>/200</p>
+    </section>
+
     <button type="button" id="finish-day-btn" class="finish-btn">День завершён</button>
-    <p id="streak-note" class="streak-note"></p>
+    <div class="streak-area" id="streak-area"></div>
 
   </main>
 
@@ -119,8 +131,17 @@
       <p class="about-lead">Маленький трекер для обычной жизни.</p>
       <p class="about-text">
         Три галочки не пытается превратить тебя в идеальную машину
-        продуктивности. Каждый день здесь всего три маленьких дела:
-        ✍️ писать, 🏋️ двигаться и 📖 развиваться.
+        продуктивности. Каждый день здесь всего три маленьких дела.
+        Смысл не в идеальной серии, а в том, чтобы возвращаться.
+      </p>
+    </section>
+
+    <section class="card">
+      <p class="section-label">Сила привычки</p>
+      <p class="about-text">
+        Вместо серии — «сила»: каждый выполненный день прибавляет очки,
+        каждый пропуск немного снижает. Один плохой день ничего не обнуляет.
+        Смотри уровень на главном экране.
       </p>
     </section>
 
@@ -130,21 +151,21 @@
         <span class="about-dot about-dot--green"></span>
         <div>
           <p class="about-item-title">Хороший день</p>
-          <p class="about-item-text">Все три дела выполнены. 3 из 3. Отличный результат.</p>
+          <p class="about-item-text">Все три дела выполнены. Сила привычки растёт быстро.</p>
         </div>
       </div>
       <div class="about-item">
         <span class="about-dot about-dot--yellow"></span>
         <div>
           <p class="about-item-title">Нормальный день</p>
-          <p class="about-item-text">Получилось сделать одно или два дела. Это тоже движение вперёд.</p>
+          <p class="about-item-text">Одно или два дела. Тоже движение вперёд.</p>
         </div>
       </div>
       <div class="about-item">
         <span class="about-dot about-dot--red"></span>
         <div>
           <p class="about-item-title">Плохой день</p>
-          <p class="about-item-text">Не получилось сделать ничего. Такое случается. Один плохой день ничего не решает.</p>
+          <p class="about-item-text">Не получилось ничего. Сила немного снижается, но не обнуляется. Один раз можно. Два подряд — уже привычка наоборот.</p>
         </div>
       </div>
     </section>
@@ -152,7 +173,6 @@
     <section class="card">
       <p class="section-label">Самое главное</p>
       <p class="about-text">
-        Смысл не в идеальной серии, а в том, чтобы возвращаться.
         Отмечай день за 20 секунд, смотри статистику за месяц —
         и просто продолжай. Все данные хранятся только на твоём устройстве.
       </p>
@@ -175,7 +195,7 @@
     </button>
   </nav>
 
-</div>
+</div><!-- .app -->
 
 <!-- ===== ОНБОРДИНГ (первый запуск) ===== -->
 <div id="onboard" class="onboard is-hidden">

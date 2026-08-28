@@ -8,40 +8,35 @@
     try {
       var raw = localStorage.getItem(STORAGE_KEY);
       return raw ? JSON.parse(raw) : {};
-    } catch (e) {
-      return {};
-    }
+    } catch (e) { return {}; }
   }
   function saveData() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(appData)); } catch (e) {}
   }
-
   var appData = loadData();
 
   // ================== ПРИВЫЧКИ ==================
   var HABITS_KEY = 'triGalochkiHabits';
   var LEGACY_IDS = ['write', 'move', 'grow'];
 
-  // Библиотека готовых привычек. Названия в прошедшем времени:
-  // отметка о сделанном, а не задача на будущее.
   var LIBRARY = {
     write:   { id: 'write',   name: 'Писал',        icon: '✍️' },
-    move:    { id: 'move',    name: 'Двигался',     icon: '🏋️' },
-    grow:    { id: 'grow',    name: 'Развивался',   icon: '📖' },
-    sleep:   { id: 'sleep',   name: 'Спал 7 часов', icon: '😴' },
-    water:   { id: 'water',   name: 'Пил воду',     icon: '💧' },
-    read:    { id: 'read',    name: 'Читал',        icon: '📚' },
-    learn:   { id: 'learn',   name: 'Учился',       icon: '🧠' },
-    clean:   { id: 'clean',   name: 'Убирал',       icon: '🧹' },
-    nophone: { id: 'nophone', name: 'Без телефона', icon: '📵' },
-    plan:    { id: 'plan',    name: 'Планировал',   icon: '🗒️' }
+    move:    { id: 'move',    name: 'Двигался',      icon: '🏋️' },
+    grow:    { id: 'grow',    name: 'Развивался',    icon: '📖' },
+    sleep:   { id: 'sleep',   name: 'Спал 7 часов',  icon: '😴' },
+    water:   { id: 'water',   name: 'Пил воду',      icon: '💧' },
+    read:    { id: 'read',    name: 'Читал',          icon: '📚' },
+    learn:   { id: 'learn',   name: 'Учился',         icon: '🧠' },
+    clean:   { id: 'clean',   name: 'Убирал',         icon: '🧹' },
+    nophone: { id: 'nophone', name: 'Без телефона',   icon: '📵' },
+    plan:    { id: 'plan',    name: 'Планировал',     icon: '🗒️' }
   };
 
   var PRESETS = [
-    { title: 'Базовый', hint: 'Классическая тройка', ids: ['write', 'move', 'grow'] },
-    { title: 'Тело',    hint: 'Движение и режим',    ids: ['move', 'sleep', 'water'] },
-    { title: 'Ум',      hint: 'Чтение и практика',   ids: ['read', 'write', 'learn'] },
-    { title: 'Быт',     hint: 'Порядок вокруг',      ids: ['clean', 'plan', 'nophone'] }
+    { title: 'Базовый', hint: 'Классическая тройка',  ids: ['write', 'move', 'grow'] },
+    { title: 'Тело',    hint: 'Движение и режим',      ids: ['move', 'sleep', 'water'] },
+    { title: 'Ум',      hint: 'Чтение и практика',     ids: ['read', 'write', 'learn'] },
+    { title: 'Быт',     hint: 'Порядок вокруг',        ids: ['clean', 'plan', 'nophone'] }
   ];
 
   function presetHabits(preset) {
@@ -68,26 +63,23 @@
       if (!raw) return DEFAULT_HABITS.map(cloneHabit);
       var parsed = JSON.parse(raw);
       return isValidConfig(parsed) ? parsed : DEFAULT_HABITS.map(cloneHabit);
-    } catch (e) {
-      return DEFAULT_HABITS.map(cloneHabit);
-    }
+    } catch (e) { return DEFAULT_HABITS.map(cloneHabit); }
   }
   function saveHabits() {
     try { localStorage.setItem(HABITS_KEY, JSON.stringify(habitsConfig)); } catch (e) {}
   }
   function cloneHabit(h) { return { id: h.id, name: h.name, icon: h.icon }; }
-  function habitIds() { return habitsConfig.map(function (h) { return h.id; }); }
 
   var habitsConfig = loadHabits();
 
   function emptyEntry() {
-    var obj = { mood: null, habits: {}, completed: false };
+    var obj = { mood: null, habits: {}, note: '', completed: false };
     habitsConfig.forEach(function (h) { obj.habits[h.id] = false; });
     return obj;
   }
-  // Запись могла быть сохранена с другим набором привычек — дополняем недостающие ключи.
   function normalizeEntry(entry) {
     if (!entry.habits) entry.habits = {};
+    if (typeof entry.note !== 'string') entry.note = '';
     habitsConfig.forEach(function (h) {
       if (typeof entry.habits[h.id] !== 'boolean') entry.habits[h.id] = false;
     });
@@ -107,7 +99,69 @@
     return habitsConfig.length > 0 && doneCount(entry) === habitsConfig.length;
   }
   function isEmptyEntry(entry) {
-    return !entry.mood && !entry.completed && doneCount(entry) === 0;
+    return !entry.mood && !entry.completed && !entry.note && doneCount(entry) === 0;
+  }
+
+  // ================== СИЛА ПРИВЫЧКИ ==================
+  // Вместо серии — плавный балл от 0 до 100.
+  // Каждый завершённый день: +12, +6 если частично (1-2 галочки), −5 если пропущен.
+  // Балл сглаживается экспоненциально — один пропуск не обнуляет всё.
+  var HABIT_POWER_KEY = 'triGalochkiPower';
+
+  function loadPower() {
+    try {
+      var raw = localStorage.getItem(HABIT_POWER_KEY);
+      return raw ? JSON.parse(raw) : { value: 0, lastKey: null };
+    } catch (e) { return { value: 0, lastKey: null }; }
+  }
+  function savePower(p) {
+    try { localStorage.setItem(HABIT_POWER_KEY, JSON.stringify(p)); } catch (e) {}
+  }
+
+  function rebuildPower() {
+    var keys = Object.keys(appData).sort();
+    var power = 0;
+    keys.forEach(function (k) {
+      var entry = appData[k];
+      if (!entry) return;
+      var n = 0;
+      habitsConfig.forEach(function (h) { if (entry.habits && entry.habits[h.id]) n++; });
+      if (entry.completed || n === habitsConfig.length) {
+        power = Math.min(100, power + 12);
+      } else if (n > 0) {
+        power = Math.min(100, power + 6);
+      } else {
+        power = Math.max(0, power - 5);
+      }
+    });
+    return Math.round(power);
+  }
+
+  function updatePowerForToday() {
+    var p = loadPower();
+    var entry = getEntry(todayKey);
+    var n = doneCount(entry);
+    var prev = p.value;
+
+    if (entry.completed || n === habitsConfig.length) {
+      p.value = Math.min(100, p.value + 12);
+    } else if (n > 0) {
+      p.value = Math.min(100, p.value + 6);
+    } else {
+      // не наказываем за незакрытый день
+      p.value = prev;
+    }
+    p.value = Math.round(p.value);
+    p.lastKey = todayKey;
+    savePower(p);
+    return p.value;
+  }
+
+  function getPowerLevel(val) {
+    if (val >= 80) return { label: 'В потоке', emoji: '🔥' };
+    if (val >= 55) return { label: 'Набираю', emoji: '⚡' };
+    if (val >= 30) return { label: 'Раскачиваюсь', emoji: '🌱' };
+    return { label: 'Только начинаю', emoji: '✦' };
   }
 
   // ================== БЭКАП И МИГРАЦИЯ ==================
@@ -122,8 +176,6 @@
     } catch (e) {}
   }
 
-  // Старые записи хранили ключи write/move/grow. Если конфиг привычек
-  // изменился, сопоставляем: сначала по id, потом по названию, иначе по позиции.
   function buildLegacyMap() {
     var map = {};
     LEGACY_IDS.forEach(function (legacyId, i) {
@@ -163,8 +215,6 @@
     try { localStorage.setItem(MIGRATION_KEY, MIGRATION_VERSION); } catch (e) {}
   }
 
-  // Смена набора привычек (пресет или сброс): переносим отметки по позиции,
-  // чтобы накопленные дни не осыпались.
   function remapEntries(oldConfig, newConfig) {
     var pairs = [];
     for (var i = 0; i < newConfig.length; i++) {
@@ -203,28 +253,32 @@
   function keyOf(date) { return toKey(date.getFullYear(), date.getMonth(), date.getDate()); }
 
   var WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-  var MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-  var MONTHS_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-  var WEEKDAY_LONG = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+  var MONTHS_GEN = ['января','февраля','марта','апреля','мая','июня',
+                    'июля','августа','сентября','октября','ноября','декабря'];
+  var MONTHS_NOM = ['Январь','Февраль','Март','Апрель','Май','Июнь',
+                    'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  var WEEKDAY_LONG = ['воскресенье','понедельник','вторник','среда',
+                      'четверг','пятница','суббота'];
 
   function daysInMonth(year, month) { return new Date(year, month + 1, 0).getDate(); }
-  // Понедельник = 0 ... воскресенье = 6, для сетки календаря
   function mondayIndex(jsDay) { return (jsDay + 6) % 7; }
 
   // ================== СОСТОЯНИЕ ==================
-  var today = new Date();
-  var todayKey = keyOf(today);
-  var viewYear = today.getFullYear();
-  var viewMonth = today.getMonth();
+  var today      = new Date();
+  var todayKey   = keyOf(today);
+  var viewYear   = today.getFullYear();
+  var viewMonth  = today.getMonth();
   var selectedDayKey = null;
 
   // ================== ВКЛАДКА "СЕГОДНЯ" ==================
-  var moodRow = document.getElementById('mood-row');
-  var habitsList = document.getElementById('habits-list');
-  var finishBtn = document.getElementById('finish-day-btn');
-  var badDayTip = document.getElementById('bad-day-tip');
-  var streakNote = document.getElementById('streak-note');
-  var todayDateEl = document.getElementById('today-date');
+  var moodRow      = document.getElementById('mood-row');
+  var habitsList   = document.getElementById('habits-list');
+  var finishBtn    = document.getElementById('finish-day-btn');
+  var badDayTip    = document.getElementById('bad-day-tip');
+  var streakArea   = document.getElementById('streak-area');
+  var todayDateEl  = document.getElementById('today-date');
+  var dayNoteEl    = document.getElementById('day-note');
+  var noteCharsEl  = document.getElementById('note-chars');
 
   function renderHabitsList() {
     var html = '';
@@ -239,9 +293,30 @@
   }
 
   function renderTodayHeading() {
-    var weekday = WEEKDAY_LONG[today.getDay()];
-    weekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-    todayDateEl.textContent = weekday + ', ' + today.getDate() + ' ' + MONTHS_GEN[today.getMonth()];
+    var wd = WEEKDAY_LONG[today.getDay()];
+    wd = wd.charAt(0).toUpperCase() + wd.slice(1);
+    todayDateEl.textContent = wd + ', ' + today.getDate() + ' ' + MONTHS_GEN[today.getMonth()];
+  }
+
+  function renderStreakArea() {
+    var power = loadPower().value;
+    var lvl   = getPowerLevel(power);
+    var streak = computeCurrentStreak();
+
+    var html = '<div class="power-bar-wrap">' +
+      '<div class="power-header">' +
+        '<span class="power-label">' + lvl.emoji + ' ' + lvl.label + '</span>' +
+        '<span class="power-value">' + power + '/100</span>' +
+      '</div>' +
+      '<div class="power-track"><div class="power-fill" style="width:' + power + '%"></div></div>' +
+    '</div>';
+
+    if (streak > 0) {
+      html += '<p class="streak-note">Серия: <strong>' + streak + '</strong> ' + dayWord(streak) + '</p>';
+    } else {
+      html += '<p class="streak-note">Отметь день, чтобы начать серию.</p>';
+    }
+    streakArea.innerHTML = html;
   }
 
   function renderToday() {
@@ -260,7 +335,11 @@
       rows[j].classList.toggle('is-checked', !!entry.habits[rows[j].dataset.habit]);
     }
 
-    // кнопка завершения дня
+    // заметка
+    dayNoteEl.value = entry.note || '';
+    noteCharsEl.textContent = (entry.note || '').length;
+
+    // кнопка
     if (entry.completed) {
       finishBtn.textContent = '✓ День завершён';
       finishBtn.classList.add('is-done');
@@ -269,24 +348,23 @@
       finishBtn.classList.remove('is-done');
     }
 
-    renderStreakNote();
-  }
-
-  function renderStreakNote() {
-    var streak = computeCurrentStreak();
-    if (streak > 0) {
-      streakNote.innerHTML = 'Текущая серия: <strong>' + streak + '</strong> ' + dayWord(streak);
-    } else {
-      streakNote.textContent = 'Отметь сегодняшний день, чтобы начать серию.';
-    }
+    renderStreakArea();
   }
 
   function dayWord(n) {
-    var mod10 = n % 10, mod100 = n % 100;
-    if (mod10 === 1 && mod100 !== 11) return 'день';
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'дня';
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'день';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return 'дня';
     return 'дней';
   }
+
+  // Заметка
+  dayNoteEl.addEventListener('input', function () {
+    var entry = getEntry(todayKey);
+    entry.note = dayNoteEl.value.slice(0, 200);
+    noteCharsEl.textContent = entry.note.length;
+    setEntry(todayKey, entry);
+  });
 
   moodRow.addEventListener('click', function (e) {
     var btn = e.target.closest('.mood-btn');
@@ -297,40 +375,32 @@
     renderToday();
   });
 
-  // ================== ПРАЗДНИК (конфетти + аффирмации) ==================
+  // ================== ПРАЗДНИК ==================
   var fxLayer = document.createElement('div');
   fxLayer.className = 'fx-layer';
   document.body.appendChild(fxLayer);
-
-  var FX_COLORS = ['#a78bfa', '#8b5cf6', '#62d9a2', '#f0c05a', '#f2705d', '#7dd3fc'];
+  var FX_COLORS = ['#a78bfa','#8b5cf6','#62d9a2','#f0c05a','#f2705d','#7dd3fc'];
   var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var lastBurstAt = 0;
 
-  // Небольшой залп частиц из точки (x, y в px от окна).
   function burstAt(x, y, count, spread) {
     if (reducedMotion) return;
     for (var i = 0; i < count; i++) {
       var p = document.createElement('span');
       p.className = 'fx-particle';
       var angle = Math.random() * Math.PI * 2;
-      var dist = (0.35 + Math.random() * 0.65) * spread;
-      var dx = Math.cos(angle) * dist;
-      var dy = Math.sin(angle) * dist - spread * 0.35; // чуть вверх
-      var size = 5 + Math.random() * 5;
-      p.style.left = x + 'px';
-      p.style.top = y + 'px';
-      p.style.width = size + 'px';
-      p.style.height = size + 'px';
-      p.style.background = FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)];
-      if (Math.random() < 0.4) p.style.borderRadius = '50%';
-      p.style.setProperty('--fx-dx', dx + 'px');
-      p.style.setProperty('--fx-dy', dy + 'px');
+      var dist  = (0.35 + Math.random() * 0.65) * spread;
+      var size  = 5 + Math.random() * 5;
+      p.style.cssText = 'left:' + x + 'px;top:' + y + 'px;width:' + size + 'px;height:' + size + 'px;' +
+        'background:' + FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)] + ';' +
+        (Math.random() < 0.4 ? 'border-radius:50%;' : '') +
+        'animation-duration:' + (0.7 + Math.random() * 0.5) + 's;';
+      p.style.setProperty('--fx-dx', (Math.cos(angle) * dist) + 'px');
+      p.style.setProperty('--fx-dy', (Math.sin(angle) * dist - spread * 0.35) + 'px');
       p.style.setProperty('--fx-rot', (Math.random() * 540 - 270) + 'deg');
-      p.style.animationDuration = (0.7 + Math.random() * 0.5) + 's';
       fxLayer.appendChild(p);
     }
     lastBurstAt = Date.now();
-    // чистим слой, когда частицы отжили
     window.setTimeout(function () {
       if (Date.now() - lastBurstAt >= 1400) fxLayer.innerHTML = '';
     }, 1500);
@@ -341,79 +411,39 @@
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }
 
-  // Залп на галочку: чем больше отмечено, тем щедрее.
-  function celebrateHabit(row, checkedCount) {
+  function celebrateHabit(row, n) {
     var c = centerOf(row.querySelector('.habit-check') || row);
-    var counts = [10, 18, 30];
-    var spreads = [70, 100, 140];
-    var idx = Math.min(checkedCount, 3) - 1;
-    burstAt(c.x, c.y, counts[idx], spreads[idx]);
+    burstAt(c.x, c.y, [10,18,30][Math.min(n,3)-1], [70,100,140][Math.min(n,3)-1]);
   }
 
-  // Фейерверк на завершение дня: серия залпов по экрану.
   function celebrateFinish() {
     if (reducedMotion) return;
     var w = window.innerWidth, h = window.innerHeight;
-    burstAt(w * 0.5, h * 0.35, 34, 160);
-    window.setTimeout(function () { burstAt(w * 0.25, h * 0.5, 22, 120); }, 180);
-    window.setTimeout(function () { burstAt(w * 0.75, h * 0.45, 22, 120); }, 320);
-    window.setTimeout(function () { burstAt(w * 0.5, h * 0.6, 26, 140); }, 500);
+    burstAt(w*.5, h*.35, 34, 160);
+    window.setTimeout(function(){ burstAt(w*.25, h*.5, 22, 120); }, 180);
+    window.setTimeout(function(){ burstAt(w*.75, h*.45, 22, 120); }, 320);
+    window.setTimeout(function(){ burstAt(w*.5, h*.6, 26, 140); }, 500);
   }
 
-  // ---------- Аффирмации ----------
-  // Тон — как в разделе «Что это?»: спокойно, без сюсюканья, про возвращение.
   var PHRASES = {
-    habit1: [
-      'Начало положено.',
-      'Первая есть. Уже не ноль.',
-      'Маленький шаг — тоже шаг.',
-      'Лёд тронулся.'
-    ],
-    habit2: [
-      'Две из трёх. Хороший темп.',
-      'Ещё одна — и день собран.',
-      'Осталась последняя.',
-      'Почти всё.'
-    ],
-    habit3: [
-      'Все три. Сегодня — полный день.',
-      '3 из 3. Красиво.',
-      'Полный комплект. Так и живём.',
-      'Вся тройка на месте.'
-    ],
-    finishGood: [
-      'Отличный день. Завтра просто продолжай.',
-      'Такие дни складываются в месяцы.',
-      'Хороший день записан. Он теперь никуда не денется.'
-    ],
-    finishOk: [
-      'Обычный день — это тоже день. Засчитано.',
-      'Не каждый день праздник, и это нормально.',
-      'День закрыт. Идём дальше.'
-    ],
-    finishBad: [
-      'Сегодня не очень — но завтра будет лучше. Главное не останавливаться.',
-      'Плохой день записан честно. Это уже смелость.',
-      'Один такой день ничего не решает. Решает то, что ты вернулся.'
-    ],
-    finishEmpty: [
-      'День закрыт. Даже пустой день, отмеченный честно, лучше забытого.',
-      'Записал — значит не бросил.'
-    ],
-    streak: [
-      'Один раз пропустить можно. Два — уже привычка наоборот.',
-      'Серия растёт. Береги её, но не бойся за неё.'
-    ]
+    h1: ['Начало положено.','Первая есть. Уже не ноль.','Маленький шаг — тоже шаг.','Лёд тронулся.'],
+    h2: ['Две из трёх. Хороший темп.','Ещё одна — и день собран.','Осталась последняя.','Почти всё.'],
+    h3: ['Все три. Сегодня — полный день.','3 из 3. Красиво.','Полный комплект.','Вся тройка на месте.'],
+    good: ['Отличный день. Завтра просто продолжай.','Такие дни складываются в месяцы.','Хороший день записан.'],
+    ok:   ['Обычный день — это тоже день. Засчитано.','Не каждый день праздник.','День закрыт. Идём дальше.'],
+    bad:  ['Сегодня не очень — но завтра лучше. Главное не останавливаться.',
+           'Плохой день записан честно. Это уже смелость.',
+           'Один такой день ничего не решает.'],
+    empty:['День закрыт. Даже пустой день, отмеченный честно, лучше забытого.','Записал — значит не бросил.'],
+    power:['Один раз пропустить можно. Два — уже привычка наоборот.',
+           'Серия растёт. Береги её, но не бойся за неё.']
   };
-
   function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
 
-  // Тост — маленькое оконце с фразой внизу экрана.
   var toastEl = document.createElement('div');
   toastEl.className = 'toast';
   document.body.appendChild(toastEl);
   var toastTimer = null;
-
   function showToast(text, long) {
     toastEl.textContent = text;
     toastEl.classList.add('is-shown');
@@ -423,12 +453,12 @@
     }, long ? 3600 : 2200);
   }
 
-  function affirmationForFinish(entry) {
+  function affirmForFinish(entry) {
     var n = doneCount(entry);
-    if (entry.mood === 'red') return pick(PHRASES.finishBad);
-    if (n === 0 && !entry.mood) return pick(PHRASES.finishEmpty);
-    if (entry.mood === 'green' || n === habitsConfig.length) return pick(PHRASES.finishGood);
-    return pick(PHRASES.finishOk);
+    if (entry.mood === 'red') return pick(PHRASES.bad);
+    if (n === 0 && !entry.mood) return pick(PHRASES.empty);
+    if (entry.mood === 'green' || n === habitsConfig.length) return pick(PHRASES.good);
+    return pick(PHRASES.ok);
   }
 
   habitsList.addEventListener('click', function (e) {
@@ -439,14 +469,12 @@
     entry.habits[key] = !entry.habits[key];
     setEntry(todayKey, entry);
     renderToday();
-
-    // празднуем только постановку галочки, не снятие
     if (entry.habits[key]) {
       var n = doneCount(entry);
       celebrateHabit(row, n);
-      if (n === 1) showToast(pick(PHRASES.habit1));
-      else if (n === 2) showToast(pick(PHRASES.habit2));
-      else if (n >= habitsConfig.length) showToast(pick(PHRASES.habit3));
+      if (n === 1) showToast(pick(PHRASES.h1));
+      else if (n === 2) showToast(pick(PHRASES.h2));
+      else if (n >= habitsConfig.length) showToast(pick(PHRASES.h3));
     }
   });
 
@@ -454,30 +482,24 @@
     var entry = getEntry(todayKey);
     entry.completed = !entry.completed;
     setEntry(todayKey, entry);
+    updatePowerForToday();
     renderToday();
     if (isCurrentMonthViewed()) renderStats();
-
-    // празднуем только завершение, не отмену
     if (entry.completed) {
       celebrateFinish();
       var streak = computeCurrentStreak();
-      // каждые 7 дней серии — отдельная фраза о серии
       if (streak > 1 && streak % 7 === 0) {
-        showToast('Серия: ' + streak + ' ' + dayWord(streak) + '. ' + pick(PHRASES.streak), true);
+        showToast('Серия: ' + streak + ' ' + dayWord(streak) + '. ' + pick(PHRASES.power), true);
       } else {
-        showToast(affirmationForFinish(entry), true);
+        showToast(affirmForFinish(entry), true);
       }
     }
   });
 
-  // ================== СЕРИЯ (STREAK) ==================
-  // Текущая серия = подряд идущие завершённые дни, заканчивая сегодняшним
-  // или вчерашним, если сегодняшний день ещё не отмечен.
+  // ================== СЕРИЯ ==================
   function computeCurrentStreak() {
     var cursor = new Date(today);
-    if (!getEntry(keyOf(cursor)).completed) {
-      cursor.setDate(cursor.getDate() - 1);
-    }
+    if (!getEntry(keyOf(cursor)).completed) cursor.setDate(cursor.getDate() - 1);
     var streak = 0;
     while (getEntry(keyOf(cursor)).completed) {
       streak++;
@@ -486,29 +508,24 @@
     return streak;
   }
 
-  // Самая длинная серия завершённых дней внутри конкретного месяца
   function bestStreakInMonth(year, month) {
     var total = daysInMonth(year, month);
-    var best = 0, current = 0;
+    var best = 0, cur = 0;
     for (var d = 1; d <= total; d++) {
-      if (getEntry(toKey(year, month, d)).completed) {
-        current++;
-        if (current > best) best = current;
-      } else {
-        current = 0;
-      }
+      if (getEntry(toKey(year, month, d)).completed) { cur++; if (cur > best) best = cur; }
+      else cur = 0;
     }
     return best;
   }
 
-  // ================== ВКЛАДКА "СТАТИСТИКА" ==================
-  var monthTitleEl = document.getElementById('month-title');
-  var statsGrid = document.getElementById('stats-grid');
-  var weekdayRow = document.getElementById('weekday-row');
-  var calendarGrid = document.getElementById('calendar-grid');
-  var dayDetail = document.getElementById('day-detail');
-  var summaryBtn = document.getElementById('summary-btn');
-  var summaryCard = document.getElementById('summary-card');
+  // ================== СТАТИСТИКА ==================
+  var monthTitleEl  = document.getElementById('month-title');
+  var statsGrid     = document.getElementById('stats-grid');
+  var weekdayRow    = document.getElementById('weekday-row');
+  var calendarGrid  = document.getElementById('calendar-grid');
+  var dayDetail     = document.getElementById('day-detail');
+  var summaryBtn    = document.getElementById('summary-btn');
+  var summaryCard   = document.getElementById('summary-card');
 
   function isCurrentMonthViewed() {
     return viewYear === today.getFullYear() && viewMonth === today.getMonth();
@@ -534,13 +551,10 @@
     }
 
     var totalPossible = total * habitsConfig.length;
-    var completionPct = totalPossible ? Math.round((totalDone / totalPossible) * 100) : 0;
-
-    return {
-      total: total, counts: counts, mood: mood, recorded: recorded,
-      fullDays: fullDays, totalDone: totalDone, totalPossible: totalPossible,
-      completionPct: completionPct, bestStreak: bestStreakInMonth(year, month)
-    };
+    var pct = totalPossible ? Math.round(totalDone / totalPossible * 100) : 0;
+    return { total: total, counts: counts, mood: mood, recorded: recorded,
+             fullDays: fullDays, totalDone: totalDone, totalPossible: totalPossible,
+             completionPct: pct, bestStreak: bestStreakInMonth(year, month) };
   }
 
   function renderMonthNav() {
@@ -550,25 +564,22 @@
   function renderStatsGrid() {
     var s = computeMonthStats(viewYear, viewMonth);
     var html = '';
-
     habitsConfig.forEach(function (h) {
-      var value = s.counts[h.id] || 0;
-      var pct = s.total ? Math.round((value / s.total) * 100) : 0;
+      var v = s.counts[h.id] || 0;
+      var pct = s.total ? Math.round(v / s.total * 100) : 0;
       html += '<div class="stat-row-wrap">' +
         '<div class="stat-row">' +
-        '<span class="stat-icon">' + h.icon + '</span>' +
-        '<span class="stat-name">' + h.name + '</span>' +
-        '<span class="stat-value">' + value + '/' + s.total + '</span>' +
+          '<span class="stat-icon">' + h.icon + '</span>' +
+          '<span class="stat-name">' + h.name + '</span>' +
+          '<span class="stat-value">' + v + '/' + s.total + '</span>' +
         '</div>' +
         '<div class="stat-bar-track"><div class="stat-bar-fill" style="width:' + pct + '%"></div></div>' +
-        '</div>';
+      '</div>';
     });
-
     html += '<div class="stats-divider"></div>';
     html += '<div class="stat-highlight-row"><span class="stat-name">Выполнение</span><span class="stat-value">' + s.completionPct + '%</span></div>';
-    html += '<div class="stat-highlight-row"><span class="stat-name">Дней все 3 привычки</span><span class="stat-value">' + s.fullDays + '</span></div>';
-    html += '<div class="stat-highlight-row"><span class="stat-name">Лучшая серия</span><span class="stat-value">' + s.bestStreak + '</span></div>';
-
+    html += '<div class="stat-highlight-row"><span class="stat-name">Все три привычки</span><span class="stat-value">' + s.fullDays + ' дн.</span></div>';
+    html += '<div class="stat-highlight-row"><span class="stat-name">Лучшая серия</span><span class="stat-value">' + s.bestStreak + ' дн.</span></div>';
     statsGrid.innerHTML = html;
   }
 
@@ -578,51 +589,49 @@
   }
 
   function renderCalendar() {
-    var total = daysInMonth(viewYear, viewMonth);
+    var total   = daysInMonth(viewYear, viewMonth);
     var firstDow = mondayIndex(new Date(viewYear, viewMonth, 1).getDay());
     var html = '';
-
     for (var i = 0; i < firstDow; i++) html += '<div class="day-cell is-empty"></div>';
-
     for (var d = 1; d <= total; d++) {
       var key = toKey(viewYear, viewMonth, d);
       var raw = appData[key];
-      var classes = ['day-cell'];
-      if (key === todayKey) classes.push('is-today');
-      if (key === selectedDayKey) classes.push('is-selected');
+      var cls = ['day-cell'];
+      if (key === todayKey) cls.push('is-today');
+      if (key === selectedDayKey) cls.push('is-selected');
       if (raw) {
-        var entry = normalizeEntry(raw);
-        if (entry.mood) classes.push('has-mood-' + entry.mood);
-        if (isFullDay(entry)) classes.push('is-full');
+        var e = normalizeEntry(raw);
+        if (e.mood) cls.push('has-mood-' + e.mood);
+        if (isFullDay(e)) cls.push('is-full');
       }
-      html += '<div class="' + classes.join(' ') + '" data-day-key="' + key + '">' + d + '</div>';
+      html += '<div class="' + cls.join(' ') + '" data-day-key="' + key + '">' + d + '</div>';
     }
-
     calendarGrid.innerHTML = html;
   }
 
   var MOOD_LABEL = { red: 'плохой 🔴', yellow: 'обычный 🟡', green: 'хороший 🟢' };
 
   function renderDayDetail() {
-    if (!selectedDayKey) {
-      dayDetail.classList.add('is-hidden');
-      return;
-    }
+    if (!selectedDayKey) { dayDetail.classList.add('is-hidden'); return; }
     var raw = appData[selectedDayKey];
     var parts = selectedDayKey.split('-');
     var label = parseInt(parts[2], 10) + ' ' + MONTHS_GEN[parseInt(parts[1], 10) - 1];
-
     if (!raw || isEmptyEntry(normalizeEntry(raw))) {
       dayDetail.innerHTML = '<strong>' + label + '</strong> — нет записи.';
     } else {
       var entry = normalizeEntry(raw);
       var icons = habitsConfig.filter(function (h) { return entry.habits[h.id]; })
                               .map(function (h) { return h.icon; });
+      var noteStr = entry.note ? '<br><span class="day-detail-note">"' + escapeHtml(entry.note) + '"</span>' : '';
       dayDetail.innerHTML = '<strong>' + label + '</strong> — ' +
         (entry.mood ? MOOD_LABEL[entry.mood] : 'настроение не отмечено') +
-        (icons.length ? ', ' + icons.join(' ') : ', без привычек');
+        (icons.length ? ', ' + icons.join(' ') : '') + noteStr;
     }
     dayDetail.classList.remove('is-hidden');
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   calendarGrid.addEventListener('click', function (e) {
@@ -657,39 +666,6 @@
   }
 
   // ================== ИТОГИ МЕСЯЦА ==================
-  function renderSummary() {
-    var s = computeMonthStats(viewYear, viewMonth);
-    var isCurrent = isCurrentMonthViewed();
-    var elapsed = isCurrent ? today.getDate() : s.total;
-
-    var bestDayLabel = findBestDay(viewYear, viewMonth);
-    var badDays = s.mood.red;
-
-    var html = '<h3>' + MONTHS_NOM[viewMonth] + ' ' + viewYear + '</h3>';
-    html += '<p class="summary-line">' + (isCurrent ? 'Прожито ' + elapsed + ' из ' + s.total + ' ' + dayWord(s.total) + '.' : 'Прожит ' + s.total + ' ' + dayWord(s.total) + '.') + '</p>';
-    habitsConfig.forEach(function (h) {
-      var value = s.counts[h.id] || 0;
-      html += '<p class="summary-line">' + h.icon + ' ' + h.name + ' — <strong>' + value + '</strong> ' + dayWord(value) + '</p>';
-    });
-    html += '<p class="summary-line">Всего выполнено <strong>' + s.totalDone + '</strong> из ' + s.totalPossible + ' привычек.</p>';
-    if (bestDayLabel) html += '<p class="summary-line">Лучший день: <strong>' + bestDayLabel + '</strong></p>';
-    html += '<p class="summary-line">Самая длинная серия: <strong>' + s.bestStreak + '</strong> ' + dayWord(s.bestStreak) + '</p>';
-    html += '<p class="summary-line">Плохих дней: <strong>' + badDays + '</strong></p>';
-
-    var closing;
-    if (badDays === 0 && s.recorded === 0) {
-      closing = 'Пока нет ни одной записи за этот месяц.';
-    } else if (badDays > 0) {
-      closing = 'И ты всё равно продолжил.';
-    } else {
-      closing = 'Ни одного по-настоящему плохого дня.';
-    }
-    html += '<p class="summary-closing">' + closing + '</p>';
-
-    summaryCard.innerHTML = html;
-    summaryCard.classList.remove('is-hidden');
-  }
-
   function findBestDay(year, month) {
     var total = daysInMonth(year, month);
     var bestKey = null, bestScore = -1, bestGreen = false;
@@ -709,6 +685,33 @@
     return parseInt(parts[2], 10) + ' ' + MONTHS_GEN[parseInt(parts[1], 10) - 1];
   }
 
+  function renderSummary() {
+    var s = computeMonthStats(viewYear, viewMonth);
+    var isCurrent = isCurrentMonthViewed();
+    var elapsed = isCurrent ? today.getDate() : s.total;
+    var bestDay = findBestDay(viewYear, viewMonth);
+
+    var html = '<h3>' + MONTHS_NOM[viewMonth] + ' ' + viewYear + '</h3>';
+    html += '<p class="summary-line">' + (isCurrent ? 'Прожито ' + elapsed + ' из ' + s.total : 'Прожит ' + s.total) + ' ' + dayWord(s.total) + '.</p>';
+    habitsConfig.forEach(function (h) {
+      var v = s.counts[h.id] || 0;
+      html += '<p class="summary-line">' + h.icon + ' ' + h.name + ' — <strong>' + v + '</strong> ' + dayWord(v) + '</p>';
+    });
+    html += '<p class="summary-line">Всего выполнено <strong>' + s.totalDone + '</strong> из ' + s.totalPossible + ' привычек.</p>';
+    if (bestDay) html += '<p class="summary-line">Лучший день: <strong>' + bestDay + '</strong></p>';
+    html += '<p class="summary-line">Самая длинная серия: <strong>' + s.bestStreak + '</strong> ' + dayWord(s.bestStreak) + '</p>';
+    html += '<p class="summary-line">Плохих дней: <strong>' + s.mood.red + '</strong></p>';
+
+    var closing;
+    if (s.mood.red === 0 && s.recorded === 0) closing = 'Пока нет ни одной записи за этот месяц.';
+    else if (s.mood.red > 0) closing = 'И ты всё равно продолжил.';
+    else closing = 'Ни одного по-настоящему плохого дня.';
+    html += '<p class="summary-closing">' + closing + '</p>';
+
+    summaryCard.innerHTML = html;
+    summaryCard.classList.remove('is-hidden');
+  }
+
   summaryBtn.addEventListener('click', function () {
     if (summaryCard.classList.contains('is-hidden')) {
       renderSummary();
@@ -720,51 +723,39 @@
 
   // ================== НАПОМИНАНИЕ ==================
   var LN = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) || null;
-  var REMINDER_ID = 1001;
+  var REMINDER_ID  = 1001;
   var REMINDER_KEY = 'triGalochkiReminder';
 
   function loadReminder() {
     try {
       var raw = localStorage.getItem(REMINDER_KEY);
       return raw ? JSON.parse(raw) : { enabled: false, time: '21:00' };
-    } catch (e) {
-      return { enabled: false, time: '21:00' };
-    }
+    } catch (e) { return { enabled: false, time: '21:00' }; }
   }
-  function saveReminder(r) { localStorage.setItem(REMINDER_KEY, JSON.stringify(r)); }
-
-  function parseTime(t) {
-    var parts = t.split(':');
-    return { hour: parseInt(parts[0], 10), minute: parseInt(parts[1], 10) };
-  }
+  function saveReminder(r) { try { localStorage.setItem(REMINDER_KEY, JSON.stringify(r)); } catch (e) {} }
 
   function scheduleReminder(time) {
     if (!LN) return;
-    var hm = parseTime(time);
-    LN.schedule({
-      notifications: [{
-        id: REMINDER_ID,
-        title: 'Три галочки',
-        body: 'Как прошёл день? Отметь за 20 секунд.',
-        schedule: { on: { hour: hm.hour, minute: hm.minute }, allowWhileIdle: true }
-      }]
-    }).catch(function () {});
+    var parts = time.split(':');
+    LN.schedule({ notifications: [{ id: REMINDER_ID, title: 'Три галочки',
+      body: 'Как прошёл день? Отметь за 20 секунд.',
+      schedule: { on: { hour: parseInt(parts[0],10), minute: parseInt(parts[1],10) }, allowWhileIdle: true }
+    }] }).catch(function(){});
   }
-
   function cancelReminder() {
     if (!LN) return;
-    LN.cancel({ notifications: [{ id: REMINDER_ID }] }).catch(function () {});
+    LN.cancel({ notifications: [{ id: REMINDER_ID }] }).catch(function(){});
   }
 
-  var settingsBtn = document.getElementById('settings-btn');
-  var settingsPanel = document.getElementById('settings-panel');
+  var settingsBtn    = document.getElementById('settings-btn');
+  var settingsPanel  = document.getElementById('settings-panel');
   var reminderToggle = document.getElementById('reminder-toggle');
-  var reminderTime = document.getElementById('reminder-time');
-  var reminderNote = document.getElementById('reminder-note');
+  var reminderTime   = document.getElementById('reminder-time');
+  var reminderNote   = document.getElementById('reminder-note');
   var reminder = loadReminder();
 
   reminderToggle.checked = reminder.enabled;
-  reminderTime.value = reminder.time;
+  reminderTime.value     = reminder.time;
 
   if (!LN) {
     reminderToggle.disabled = true;
@@ -784,26 +775,20 @@
     if (reminderToggle.checked) {
       LN.requestPermissions().then(function (res) {
         if (res.display === 'granted') {
-          reminder.enabled = true;
-          saveReminder(reminder);
-          scheduleReminder(reminder.time);
-          reminderNote.textContent = '';
+          reminder.enabled = true; saveReminder(reminder);
+          scheduleReminder(reminder.time); reminderNote.textContent = '';
         } else {
           reminderToggle.checked = false;
           reminderNote.textContent = 'Уведомления запрещены в настройках телефона.';
         }
       });
     } else {
-      reminder.enabled = false;
-      saveReminder(reminder);
-      cancelReminder();
-      reminderNote.textContent = '';
+      reminder.enabled = false; saveReminder(reminder); cancelReminder(); reminderNote.textContent = '';
     }
   });
 
   reminderTime.addEventListener('change', function () {
-    reminder.time = reminderTime.value;
-    saveReminder(reminder);
+    reminder.time = reminderTime.value; saveReminder(reminder);
     if (reminder.enabled) scheduleReminder(reminder.time);
   });
 
@@ -811,29 +796,24 @@
     if (!LN) return;
     LN.requestPermissions().then(function (res) {
       if (res.display !== 'granted') return;
-      reminder.enabled = true;
-      reminder.time = time;
-      saveReminder(reminder);
-      scheduleReminder(time);
-      reminderToggle.checked = true;
-      reminderTime.value = time;
-    }).catch(function () {});
+      reminder.enabled = true; reminder.time = time; saveReminder(reminder);
+      scheduleReminder(time); reminderToggle.checked = true; reminderTime.value = time;
+    }).catch(function(){});
   }
 
   // ================== РЕДАКТОР ПРИВЫЧЕК ==================
-  var habitsEditor = document.getElementById('habits-editor');
+  var habitsEditor     = document.getElementById('habits-editor');
   var habitsEditorNote = document.getElementById('habits-editor-note');
-  var habitsSaveBtn = document.getElementById('habits-save');
-  var habitsResetBtn = document.getElementById('habits-reset');
-
+  var habitsSaveBtn    = document.getElementById('habits-save');
+  var habitsResetBtn   = document.getElementById('habits-reset');
   var MAX_NAME = 24;
 
   function renderHabitsEditor() {
     var html = '';
     habitsConfig.forEach(function (h, i) {
       html += '<div class="habit-edit-row">' +
-        '<input type="text" class="habit-edit-icon" data-index="' + i + '" value="' + escapeAttr(h.icon) + '" maxlength="4" aria-label="Иконка привычки ' + (i + 1) + '">' +
-        '<input type="text" class="habit-edit-name" data-index="' + i + '" value="' + escapeAttr(h.name) + '" maxlength="' + MAX_NAME + '" aria-label="Название привычки ' + (i + 1) + '">' +
+        '<input type="text" class="habit-edit-icon" data-index="' + i + '" value="' + escapeAttr(h.icon) + '" maxlength="4" aria-label="Иконка ' + (i+1) + '">' +
+        '<input type="text" class="habit-edit-name" data-index="' + i + '" value="' + escapeAttr(h.name) + '" maxlength="' + MAX_NAME + '" aria-label="Название ' + (i+1) + '">' +
         '</div>';
     });
     habitsEditor.innerHTML = html;
@@ -842,69 +822,54 @@
   }
 
   function escapeAttr(str) {
-    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  function editorNote(text, isError) {
-    habitsEditorNote.textContent = text;
-    habitsEditorNote.classList.toggle('is-error', !!isError);
+    return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   habitsSaveBtn.addEventListener('click', function () {
     var iconInputs = habitsEditor.querySelectorAll('.habit-edit-icon');
     var nameInputs = habitsEditor.querySelectorAll('.habit-edit-name');
     var next = [];
-
     for (var i = 0; i < habitsConfig.length; i++) {
       var icon = (iconInputs[i].value || '').trim();
       var name = (nameInputs[i].value || '').trim();
       if (!name) { editorNote('Название не может быть пустым.', true); return; }
-      if (name.length > MAX_NAME) { editorNote('Название длиннее ' + MAX_NAME + ' символов.', true); return; }
-      if (!icon) { editorNote('Добавь иконку — эмодзи или один символ.', true); return; }
+      if (!icon) { editorNote('Добавь иконку.', true); return; }
       if (Array.from(icon).length > 2) { editorNote('Иконка — не больше двух символов.', true); return; }
       next.push({ id: habitsConfig[i].id, name: name, icon: icon });
     }
-
-    // id не меняются, поэтому накопленные отметки остаются на месте
     applyHabitsConfig(next, false);
-    renderHabitsList();
-    renderToday();
-    renderStats();
+    renderHabitsList(); renderToday(); renderStats();
     editorNote('Сохранено.', false);
   });
 
   habitsResetBtn.addEventListener('click', function () {
     applyHabitsConfig(DEFAULT_HABITS, true);
-    renderHabitsEditor();
-    renderHabitsList();
-    renderToday();
-    renderStats();
+    renderHabitsEditor(); renderHabitsList(); renderToday(); renderStats();
     editorNote('Вернул стандартный набор.', false);
   });
 
+  function editorNote(text, isError) {
+    habitsEditorNote.textContent = text;
+    habitsEditorNote.classList.toggle('is-error', !!isError);
+  }
+
   // ================== ОНБОРДИНГ ==================
   var ONBOARD_KEY = 'triGalochkiOnboardDone';
-  function onboardIsDone() {
-    try { return localStorage.getItem(ONBOARD_KEY) === '1'; } catch (e) { return false; }
-  }
-  function markOnboardDone() {
-    try { localStorage.setItem(ONBOARD_KEY, '1'); } catch (e) {}
-  }
+  function onboardIsDone() { try { return localStorage.getItem(ONBOARD_KEY) === '1'; } catch(e){ return false; } }
+  function markOnboardDone() { try { localStorage.setItem(ONBOARD_KEY, '1'); } catch(e){} }
 
-  var onboard = document.getElementById('onboard');
-  var onboardPresets = document.getElementById('onboard-presets');
-  var onboardChosen = document.getElementById('onboard-chosen');
-  var selectedPreset = 0;
+  var onboard         = document.getElementById('onboard');
+  var onboardPresets  = document.getElementById('onboard-presets');
+  var onboardChosen   = document.getElementById('onboard-chosen');
+  var selectedPreset  = 0;
 
   function onboardStep(n) {
-    var steps = onboard.querySelectorAll('.onboard-step');
-    for (var i = 0; i < steps.length; i++) {
-      steps[i].classList.toggle('is-active', parseInt(steps[i].dataset.step, 10) === n);
-    }
-    var dots = onboard.querySelectorAll('.onboard-dot');
-    for (var j = 0; j < dots.length; j++) {
-      dots[j].classList.toggle('is-active', j === n - 1);
-    }
+    onboard.querySelectorAll('.onboard-step').forEach(function (s) {
+      s.classList.toggle('is-active', parseInt(s.dataset.step, 10) === n);
+    });
+    onboard.querySelectorAll('.onboard-dot').forEach(function (d, i) {
+      d.classList.toggle('is-active', i === n - 1);
+    });
     if (n === 3) renderChosen();
   }
 
@@ -915,16 +880,15 @@
       html += '<button type="button" class="preset-card' + (i === selectedPreset ? ' is-selected' : '') + '" data-preset="' + i + '">' +
         '<span class="preset-head"><strong>' + p.title + '</strong><span class="preset-hint">' + p.hint + '</span></span>' +
         '<span class="preset-habits">' +
-        habits.map(function (h) { return '<span class="preset-habit">' + h.icon + ' ' + h.name + '</span>'; }).join('') +
-        '</span>' +
-        '</button>';
+          habits.map(function(h){ return '<span class="preset-habit">' + h.icon + ' ' + h.name + '</span>'; }).join('') +
+        '</span></button>';
     });
     onboardPresets.innerHTML = html;
   }
 
   function renderChosen() {
     var habits = presetHabits(PRESETS[selectedPreset]);
-    onboardChosen.innerHTML = habits.map(function (h) {
+    onboardChosen.innerHTML = habits.map(function(h){
       return '<div class="chosen-row"><span class="habit-icon">' + h.icon + '</span><span class="habit-name">' + h.name + '</span></div>';
     }).join('');
   }
@@ -934,19 +898,13 @@
     applyHabitsConfig(config, true);
     markOnboardDone();
     onboard.classList.add('is-hidden');
-    renderHabitsList();
-    renderToday();
-    renderStats();
-
+    renderHabitsList(); renderToday(); renderStats();
     var wantsReminder = document.getElementById('onboard-reminder');
     if (!useDefaults && wantsReminder && wantsReminder.checked) enableReminderAt('21:00');
   }
 
   function initOnboarding() {
-    if (onboardIsDone()) {
-      onboard.classList.add('is-hidden');
-      return;
-    }
+    if (onboardIsDone()) { onboard.classList.add('is-hidden'); return; }
     onboard.classList.remove('is-hidden');
     renderPresetCards();
     onboardStep(1);
@@ -961,270 +919,149 @@
     onboard.addEventListener('click', function (e) {
       var btn = e.target.closest('[data-onboard-go]');
       if (btn) { onboardStep(parseInt(btn.dataset.onboardGo, 10)); return; }
-      if (e.target.closest('#onboard-skip')) { finishOnboarding(true); return; }
+      if (e.target.closest('#onboard-skip'))   { finishOnboarding(true);  return; }
       if (e.target.closest('#onboard-finish')) { finishOnboarding(false); }
     });
   }
 
   // ================== ВКЛАДКИ ==================
   var TAB_ORDER = ['today', 'stats', 'about'];
-  var tabBtns = document.querySelectorAll('.tab-btn');
-  var views = {
+  var tabBtns   = document.querySelectorAll('.tab-btn');
+  var views     = {
     today: document.getElementById('view-today'),
-    stats: document.getElementById('view-stats'),
-    about: document.getElementById('view-about')
+    stats:  document.getElementById('view-stats'),
+    about:  document.getElementById('view-about')
   };
-
-  var scrollPositions = {
-    today: 0,
-    stats: 0,
-    about: 0
-  };
-
-  function activateTab(name, fromSwipe) {
-    if (!views[name]) return;
-
-    var previous = currentTab();
-    if (previous !== name && views[previous]) {
-      scrollPositions[previous] = window.scrollY || window.pageYOffset || 0;
-    }
-
-    tabBtns.forEach(function (b) {
-      b.classList.toggle('is-active', b.dataset.tab === name);
-    });
-
-    if (fromSwipe) {
-      // Новый экран уже виден как .view-peek. Сначала делаем его активным,
-      // и только после этого убираем старый экран из потока.
-      views[name].classList.add('is-active', 'view-no-anim');
-      Object.keys(views).forEach(function (k) {
-        if (k !== name) views[k].classList.remove('is-active');
-      });
-    } else {
-      Object.keys(views).forEach(function (k) {
-        views[k].classList.toggle('is-active', k === name);
-      });
-    }
-
-    if (name === 'stats') renderStats();
-
-    var savedScroll = scrollPositions[name] || 0;
-    window.requestAnimationFrame(function () {
-      window.scrollTo(0, savedScroll);
-      if (fromSwipe) {
-        window.requestAnimationFrame(function () {
-          views[name].classList.remove('view-no-anim');
-        });
-      }
-    });
-  }
-
-  tabBtns.forEach(function (btn) {
-    btn.addEventListener('click', function () { activateTab(btn.dataset.tab); });
-  });
+  var tabScroll = { today: 0, stats: 0, about: 0 };
 
   function currentTab() {
     var active = document.querySelector('.tab-btn.is-active');
     return active ? active.dataset.tab : 'today';
   }
 
-  // ================== СВАЙП СО СДВИГОМ ==================
-  // Экран следует за пальцем; при отпускании либо доезжает до соседней
-  // вкладки, либо возвращается на место. На краях — «резинка».
-  var appEl = document.querySelector('.app');
+  function activateTab(name) {
+    if (!views[name]) return;
+    var prev = currentTab();
+    if (prev && prev !== name) tabScroll[prev] = window.pageYOffset || 0;
+    tabBtns.forEach(function (b) { b.classList.toggle('is-active', b.dataset.tab === name); });
+    Object.keys(views).forEach(function (k) { views[k].classList.toggle('is-active', k === name); });
+    if (name === 'stats') renderStats();
+    window.scrollTo(0, tabScroll[name] || 0);
+  }
+
+  tabBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () { activateTab(btn.dataset.tab); });
+  });
+
+  // ================== СВАЙП ==================
+  // Мерцание в WebView вызывают три вещи:
+  // 1. background-attachment:fixed на body (вынесен в .bg-glow)
+  // 2. backdrop-filter:blur на карточках (отключается во время движения)
+  // 3. Снятие трансформа через setTimeout — таймер бьёт раньше конца анимации,
+  //    transform щёлкает. Используем transitionend.
+  // 4. Порядок классов: новый экран is-active раньше, чем старый теряет is-active,
+  //    иначе контейнер схлопывается на один кадр.
   var swipe = {
-    tracking: false,
-    dragging: false,
-    startX: 0, startY: 0, startT: 0,
-    dx: 0, width: 1,
-    fromEl: null, toEl: null, toName: null, dir: 0,
-    finishTimer: null,
-    finished: false
+    tracking: false, dragging: false, settling: false,
+    startX: 0, startY: 0, startT: 0, dx: 0, width: 1,
+    fromEl: null, toEl: null, toName: null, dir: 0
   };
 
   function beginDrag() {
-    var name = currentTab();
-    swipe.fromEl = views[name];
-    swipe.width = swipe.fromEl.offsetWidth || window.innerWidth;
+    swipe.fromEl = views[currentTab()];
+    swipe.width  = swipe.fromEl.offsetWidth || window.innerWidth;
     swipe.dragging = true;
-    swipe.finished = false;
-    appEl.classList.add('is-swiping');
     swipe.fromEl.classList.add('view-dragging');
-  }
-
-  function attachNeighbor(dir) {
-    detachNeighbor();
-
-    var i = TAB_ORDER.indexOf(currentTab());
-    var next = i + dir;
-
-    if (next < 0 || next >= TAB_ORDER.length) {
-      swipe.toEl = null;
-      swipe.toName = null;
-      return;
-    }
-
-    swipe.toName = TAB_ORDER[next];
-    swipe.toEl = views[swipe.toName];
-
-    if (swipe.toName === 'stats') renderStats();
-
-    // Сосед сразу становится реальным видимым слоем, пока текущий ещё
-    // остаётся на месте. Поэтому между экранами нет пустого кадра.
-    swipe.toEl.classList.add('view-peek', 'view-dragging');
-    swipe.toEl.style.top = swipe.fromEl.offsetTop + 'px';
-    swipe.toEl.style.transform = 'translateX(' + (dir * swipe.width) + 'px)';
-    swipe.dir = dir;
   }
 
   function detachNeighbor() {
     if (!swipe.toEl) return;
-    swipe.toEl.classList.remove('view-peek', 'view-dragging', 'view-anim');
+    swipe.toEl.classList.remove('view-peek','view-dragging','view-anim');
     swipe.toEl.style.top = '';
     swipe.toEl.style.transform = '';
-    swipe.toEl = null;
-    swipe.toName = null;
+    swipe.toEl = null; swipe.toName = null;
+  }
+
+  function attachNeighbor(dir) {
+    detachNeighbor();
+    var i    = TAB_ORDER.indexOf(currentTab());
+    var next = i + dir;
+    swipe.dir = dir;
+    if (next < 0 || next >= TAB_ORDER.length) { swipe.toEl = null; swipe.toName = null; return; }
+    swipe.toName = TAB_ORDER[next];
+    swipe.toEl   = views[swipe.toName];
+    if (swipe.toName === 'stats') renderStats();
+    swipe.toEl.classList.add('view-peek','view-dragging');
+    swipe.toEl.style.top       = swipe.fromEl.offsetTop + 'px';
+    swipe.toEl.style.transform = 'translate3d(' + (dir * swipe.width) + 'px,0,0)';
   }
 
   function setDragPosition(dx) {
     var dir = dx < 0 ? 1 : -1;
-
-    if (dir !== swipe.dir || !swipe.toEl) {
-      attachNeighbor(dir);
-    }
-
-    if (!swipe.toEl) {
-      dx = dx * 0.3;
-    }
-
-    swipe.fromEl.style.transform = 'translate3d(' + dx + 'px, 0, 0)';
-
-    if (swipe.toEl) {
-      swipe.toEl.style.transform =
-        'translate3d(' + (dx + swipe.dir * swipe.width) + 'px, 0, 0)';
-    }
+    if (dir !== swipe.dir || !swipe.toEl) attachNeighbor(dir);
+    if (!swipe.toEl) dx = dx * 0.3;
+    swipe.fromEl.style.transform = 'translate3d(' + dx + 'px,0,0)';
+    if (swipe.toEl) swipe.toEl.style.transform = 'translate3d(' + (dx + swipe.dir * swipe.width) + 'px,0,0)';
   }
 
-  function clearFinishTimer() {
-    if (swipe.finishTimer) {
-      window.clearTimeout(swipe.finishTimer);
-      swipe.finishTimer = null;
+  function onTransitionEnd(el, done) {
+    var done_ = false;
+    var timer;
+    function finish() {
+      if (done_) return; done_ = true;
+      el.removeEventListener('transitionend', handler);
+      window.clearTimeout(timer);
+      done();
     }
-  }
-
-  function finishCommit(fromEl, toEl, toName) {
-    if (swipe.finished) return;
-    swipe.finished = true;
-    clearFinishTimer();
-
-    // Сначала новый экран становится активным, пока старый ещё существует.
-    activateTab(toName, true);
-
-    fromEl.classList.remove('view-dragging', 'view-anim');
-    fromEl.style.transform = '';
-
-    toEl.classList.remove('view-peek', 'view-dragging', 'view-anim');
-    toEl.style.top = '';
-    toEl.style.transform = '';
-
-    swipe.toEl = null;
-    swipe.toName = null;
-    swipe.dir = 0;
-    appEl.classList.remove('is-swiping');
-  }
-
-  function finishRollback(fromEl, toEl) {
-    if (swipe.finished) return;
-    swipe.finished = true;
-    clearFinishTimer();
-
-    fromEl.classList.remove('view-dragging', 'view-anim');
-    fromEl.style.transform = '';
-
-    if (toEl) {
-      toEl.classList.remove('view-peek', 'view-dragging', 'view-anim');
-      toEl.style.top = '';
-      toEl.style.transform = '';
-    }
-
-    swipe.toEl = null;
-    swipe.toName = null;
-    swipe.dir = 0;
-    appEl.classList.remove('is-swiping');
+    function handler(e) { if (e.target === el && e.propertyName === 'transform') finish(); }
+    el.addEventListener('transitionend', handler);
+    timer = window.setTimeout(finish, 420);
   }
 
   function endDrag(commit) {
-    var fromEl = swipe.fromEl;
-    var toEl = swipe.toEl;
-    var toName = swipe.toName;
-    var width = swipe.width;
-    var dir = swipe.dir;
-
-    swipe.dragging = false;
-    swipe.fromEl = null;
-    swipe.finished = false;
-    clearFinishTimer();
-
-    if (!fromEl) return;
+    var fromEl = swipe.fromEl, toEl = swipe.toEl, toName = swipe.toName;
+    var width  = swipe.width, dir = swipe.dir;
+    swipe.dragging = false; swipe.settling = true; swipe.fromEl = null;
 
     if (commit && toEl) {
       fromEl.classList.add('view-anim');
       toEl.classList.add('view-anim');
+      void fromEl.offsetWidth; // force layout перед сменой цели
+      fromEl.style.transform = 'translate3d(' + (-dir * width) + 'px,0,0)';
+      toEl.style.transform   = 'translate3d(0,0,0)';
 
-      fromEl.style.transform = 'translate3d(' + (-dir * width) + 'px, 0, 0)';
-      toEl.style.transform = 'translate3d(0, 0, 0)';
+      onTransitionEnd(toEl, function () {
+        // порядок важен — сначала показываем новый, потом прячем старый
+        toEl.classList.add('is-active');
+        toEl.classList.remove('view-peek');
+        toEl.style.top = '';
+        fromEl.classList.remove('is-active');
 
-      var onCommitEnd = function (e) {
-        if (e && e.propertyName !== 'transform') return;
-        fromEl.removeEventListener('transitionend', onCommitEnd);
-        finishCommit(fromEl, toEl, toName);
-      };
+        toEl.classList.remove('view-dragging','view-anim'); toEl.style.transform = '';
+        fromEl.classList.remove('view-dragging','view-anim'); fromEl.style.transform = '';
 
-      fromEl.addEventListener('transitionend', onCommitEnd);
-      swipe.finishTimer = window.setTimeout(function () {
-        fromEl.removeEventListener('transitionend', onCommitEnd);
-        finishCommit(fromEl, toEl, toName);
-      }, 420);
+        swipe.toEl = null; swipe.toName = null; swipe.dir = 0; swipe.settling = false;
+
+        tabBtns.forEach(function (b) { b.classList.toggle('is-active', b.dataset.tab === toName); });
+        window.scrollTo(0, tabScroll[toName] || 0);
+      });
     } else {
-      // Откат.
       fromEl.classList.add('view-anim');
-      fromEl.style.transform = 'translate3d(0, 0, 0)';
-
-      if (toEl) {
-        toEl.classList.add('view-anim');
-        toEl.style.transform = 'translate3d(' + (dir * width) + 'px, 0, 0)';
-      }
-
-      var onRollbackEnd = function (e) {
-        if (e && e.propertyName !== 'transform') return;
-        fromEl.removeEventListener('transitionend', onRollbackEnd);
-        finishRollback(fromEl, toEl);
-      };
-
-      fromEl.addEventListener('transitionend', onRollbackEnd);
-      swipe.finishTimer = window.setTimeout(function () {
-        fromEl.removeEventListener('transitionend', onRollbackEnd);
-        finishRollback(fromEl, toEl);
-      }, 420);
+      if (toEl) toEl.classList.add('view-anim');
+      void fromEl.offsetWidth;
+      fromEl.style.transform = 'translate3d(0,0,0)';
+      if (toEl) toEl.style.transform = 'translate3d(' + (dir * width) + 'px,0,0)';
+      onTransitionEnd(fromEl, function () {
+        fromEl.classList.remove('view-dragging','view-anim'); fromEl.style.transform = '';
+        detachNeighbor(); swipe.dir = 0; swipe.settling = false;
+      });
     }
   }
 
   document.addEventListener('touchstart', function (e) {
-    if (e.touches.length !== 1 || swipe.dragging) {
-      swipe.tracking = false;
-      return;
-    }
-
-    if (!onboard.classList.contains('is-hidden')) {
-      swipe.tracking = false;
-      return;
-    }
-
-    if (e.target.closest('.tabbar, .switch, input, .settings-panel')) {
-      swipe.tracking = false;
-      return;
-    }
-
+    if (e.touches.length !== 1 || swipe.dragging || swipe.settling) { swipe.tracking = false; return; }
+    if (!onboard.classList.contains('is-hidden')) { swipe.tracking = false; return; }
+    if (e.target.closest('.tabbar,.switch,input,textarea,.settings-panel')) { swipe.tracking = false; return; }
     swipe.tracking = true;
     swipe.startX = e.touches[0].clientX;
     swipe.startY = e.touches[0].clientY;
@@ -1234,24 +1071,13 @@
 
   document.addEventListener('touchmove', function (e) {
     if (!swipe.tracking) return;
-
     var dx = e.touches[0].clientX - swipe.startX;
     var dy = e.touches[0].clientY - swipe.startY;
-
     if (!swipe.dragging) {
-      // Решаем, что это: горизонтальный сдвиг или вертикальный скролл.
-      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) {
-        swipe.tracking = false;
-        return;
-      }
-
-      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
-        beginDrag();
-      } else {
-        return;
-      }
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { swipe.tracking = false; return; }
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) beginDrag();
+      else return;
     }
-
     swipe.dx = dx;
     setDragPosition(dx);
   }, { passive: true });
@@ -1259,15 +1085,12 @@
   document.addEventListener('touchend', function () {
     if (!swipe.tracking) return;
     swipe.tracking = false;
-
     if (!swipe.dragging) return;
-
-    var elapsed = Date.now() - swipe.startT;
-    var velocity = Math.abs(swipe.dx) / Math.max(elapsed, 1);
+    var elapsed   = Date.now() - swipe.startT;
+    var velocity  = Math.abs(swipe.dx) / Math.max(elapsed, 1);
     var farEnough = Math.abs(swipe.dx) > swipe.width * 0.28;
-    var fastEnough = velocity > 0.45 && Math.abs(swipe.dx) > 40;
-
-    endDrag((farEnough || fastEnough) && !!swipe.toEl);
+    var fast      = velocity > 0.45 && Math.abs(swipe.dx) > 40;
+    endDrag((farEnough || fast) && !!swipe.toEl);
   }, { passive: true });
 
   document.addEventListener('touchcancel', function () {
@@ -1276,36 +1099,30 @@
   }, { passive: true });
 
   // ================== ТЕМА ==================
-  var THEME_KEY = 'triGalochkiTheme';
-  var themeBtn = document.getElementById('theme-btn');
+  var THEME_KEY  = 'triGalochkiTheme';
+  var themeBtn   = document.getElementById('theme-btn');
+  var themeMeta  = document.getElementById('theme-meta');
 
   function loadTheme() {
-    try {
-      var saved = localStorage.getItem(THEME_KEY);
-      if (saved === 'light' || saved === 'dark') return saved;
-    } catch (e) {}
+    try { var s = localStorage.getItem(THEME_KEY); if (s === 'light' || s === 'dark') return s; } catch(e){}
     return 'dark';
   }
-
   function applyTheme(theme) {
-    var meta = document.querySelector('meta[name="theme-color"]');
     if (theme === 'light') {
       document.documentElement.setAttribute('data-theme', 'light');
       themeBtn.textContent = '☀';
-      if (meta) meta.setAttribute('content', '#d9d2f2');
+      if (themeMeta) themeMeta.setAttribute('content', '#d9d2f2');
     } else {
       document.documentElement.removeAttribute('data-theme');
       themeBtn.textContent = '☾';
-      if (meta) meta.setAttribute('content', '#030305');
+      if (themeMeta) themeMeta.setAttribute('content', '#030305');
     }
   }
-
   var currentTheme = loadTheme();
   applyTheme(currentTheme);
-
   themeBtn.addEventListener('click', function () {
-    currentTheme = (currentTheme === 'dark') ? 'light' : 'dark';
-    try { localStorage.setItem(THEME_KEY, currentTheme); } catch (e) {}
+    currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem(THEME_KEY, currentTheme); } catch(e){}
     applyTheme(currentTheme);
   });
 
